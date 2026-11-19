@@ -25,3 +25,7 @@ Es una página estática: abrí `index.html` en el navegador (necesita internet 
 - Mapa: [Natural Earth](https://www.naturalearthdata.com/) vía [world-atlas](https://github.com/topojson/world-atlas) (dominio público).
 - Banderas: [flagcdn.com](https://flagcdn.com).
 - Librerías: [D3](https://d3js.org/) y [topojson-client](https://github.com/topojson/topojson-client).
+
+## Al actualizar la página
+
+Antes de cada commit corré `node scripts/version-assets.js`. Le agrega a `index.html` una huella (`?v=...`) a cada archivo CSS/JS, así los navegadores no usan versiones viejas guardadas en caché.

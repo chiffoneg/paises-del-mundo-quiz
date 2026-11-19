@@ -267,7 +267,8 @@
     else settings.regions = REGION_KEYS.filter(k => k === key || settings.regions.includes(k));
     if (!settings.regions.length) settings.regions = REGION_KEYS.slice();
     renderSetup();
-    if ((!game || game.over) && !$('stage').hidden) { inRegion = regionSet(settings.regions); paintAll(); goRegion(true); }
+    // Antes de la primera partida, el mapa de fondo muestra lo que vas eligiendo
+    if (!game) { inRegion = regionSet(settings.regions); paintAll(); goRegion(true); }
   });
   document.querySelectorAll('#setup-tabs button').forEach(b => b.addEventListener('click', () => {
     setupKind = b.dataset.kind;
@@ -325,6 +326,9 @@
   }
   function openSetup(kind) {
     if (game && !game.over) pauseClock();
+    clearTimeout(pendingAccept);
+    // que lo que escribas con el menú abierto no cuente como respuesta
+    if (document.activeElement && GAME_INPUTS.includes(document.activeElement.id)) document.activeElement.blur();
     setupKind = kind || (game ? game.kind : setupKind);
     $('setup-cancel').hidden = !game;
     $('results').hidden = true;
@@ -490,14 +494,22 @@
   }
 
   // Modo ubicar
+  // Cambia la imagen de una bandera ocultándola hasta que cargue (así no se ve la anterior)
+  function setFlagImg(img, src, srcset) {
+    img.classList.add('loading');
+    img.onload = img.onerror = () => img.classList.remove('loading');
+    if (srcset) img.srcset = srcset; else img.removeAttribute('srcset');
+    img.src = src;
+    if (img.complete) img.classList.remove('loading');
+  }
   function nextQuestion() {
-    if (!game || game.over) return;
+    clearTimeout(advanceT);
+    if (!game || game.over || game.mode !== 'locate') return;
     if (!game.queue.length) { game.current = null; finish('done'); return; }
     const c = game.current = game.queue.shift();
     game.attempts = 0; game.locked = false;
     const img = $('prompt-flag');
-    img.src = flagUrl(c.iso, 160);
-    img.srcset = `${flagUrl(c.iso, 320)} 2x`;
+    setFlagImg(img, flagUrl(c.iso, 160), `${flagUrl(c.iso, 320)} 2x`);
     img.alt = `Bandera de ${c.name}`;
     $('prompt-name').textContent = c.name;
     updateTries();
@@ -519,7 +531,7 @@
       updateScore(true);
       toast(`✓ ${t.name} <small>· Capital: ${t.capital}</small>`, 'ok');
       game.locked = true;
-      setTimeout(nextQuestion, 700);
+      advanceT = setTimeout(nextQuestion, 700);
       return;
     }
     game.attempts++;
@@ -532,7 +544,7 @@
       toast(`✗ Era ${t.name} <small>· te lo marqué en rojo</small>`, 'bad', 2000);
       game.locked = true;
       if (!isOnScreen(t)) { goRegion(true); setTimeout(() => ping(t), 750); } else ping(t);
-      setTimeout(nextQuestion, 2000);
+      advanceT = setTimeout(nextQuestion, 2000);
     } else {
       toast(`✗ Eso es ${c.name}`, 'bad');
     }
@@ -571,7 +583,7 @@
   // Escribir países de memoria: lo usan "De memoria" (mapa) y "Banderas todas juntas" (grilla)
   function tryMatch(enter, ui) {
     clearTimeout(pendingAccept);
-    if (!game || game.over || game.mode !== ui.mode || game.userPaused) return;
+    if (!game || game.over || game.mode !== ui.mode || game.userPaused || !setupEl.hidden) return;
     const raw = ui.input.value;
     if (!raw.trim()) { if (!enter) ui.hint(''); return; }
     const m = matchInput(raw);
@@ -628,13 +640,18 @@
     if (!game) return;
     const hasProgress = !game.over && (game.correct > 0 || game.misses.length > 0);
     if (hasProgress && !window.confirm('¿Reiniciar el juego? Vas a perder lo que llevás.')) return;
+    playAgain();
+  });
+  // Vuelve a jugar exactamente lo mismo (aunque en el menú hayas tocado otras opciones y cancelado)
+  function playAgain() {
+    if (!game) return;
     settings.regions = game.regions.slice();
     if (game.kind === 'flags') settings.flagMode = game.mode; else settings.mode = game.mode;
     setupKind = game.kind;
     settings.timerOn = game.timerOn;
     if (game.timerOn) settings.secs = Math.round(game.limitMs / 1000);
     startGame();
-  });
+  }
 
   // Terminar
   $('btn-end').addEventListener('click', () => {
@@ -718,7 +735,7 @@
     toast(game && game.kind === 'flags' ? 'Tocá una bandera para ver dónde queda' : 'Tocá cualquier país para ver cuál es');
   });
   $('res-options').addEventListener('click', () => openSetup());
-  $('res-again').addEventListener('click', startGame);
+  $('res-again').addEventListener('click', playAgain);
 
   // ───────── Banderas ─────────
   let advanceT = null;
@@ -739,7 +756,7 @@
     if (!game.queue.length) { game.current = null; finish('done'); return; }
     const c = game.current = game.queue.shift();
     game.attempts = 0; game.locked = false;
-    $('fo-flag').src = flagUrl(c.iso, 640);
+    setFlagImg($('fo-flag'), flagUrl(c.iso, 640));
     $('fo-reveal').hidden = true;
     foHint('');
     foInput.value = '';
@@ -750,7 +767,7 @@
     if (!game.userPaused && setupEl.hidden) foInput.focus();
   }
   function foTry(enter) {
-    if (!game || game.over || game.mode !== 'flagOne' || game.userPaused || !game.current) return;
+    if (!game || game.over || game.mode !== 'flagOne' || game.userPaused || !game.current || !setupEl.hidden) return;
     if (game.locked) { if (enter) nextFlag(); return; } // Enter salta la espera
     const raw = foInput.value;
     if (!raw.trim()) return;
@@ -831,7 +848,7 @@
     paintGridItem(c);
     fgInput.value = '';
     setGridHint(`✓ ${c.name} <span class="muted">· ${c.capital}</span>`, 'good');
-    c.gridEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    c.gridEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
     c.gridEl.classList.add('pop');
     showFloatingReveal(c, 'ok', 2600);
     if (game.correct === game.total) finish('done');
@@ -1072,7 +1089,8 @@
   // ───────── Teclado / resize ─────────
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
-      if (!drawer.hidden) closeDrawer();
+      if (!setupEl.hidden) { if (game) closeSetup(); }
+      else if (!drawer.hidden) closeDrawer();
       else if (selected) clearSelection();
       else if (!$('fg-reveal').hidden) hideFloatingReveal();
     }

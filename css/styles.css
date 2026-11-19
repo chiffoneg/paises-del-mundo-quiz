@@ -172,6 +172,9 @@ svg { flex-shrink: 0; }
 #btn-pause.is-paused .i-pause { display: none; }
 #stat-time.paused .stat-value { color: var(--muted); animation: blink 1.4s steps(2) infinite; }
 
+/* Bandera cargando: no mostramos la anterior */
+img.loading { visibility: hidden; }
+
 /* Botones Países / Banderas */
 .btn.nav.on { background: var(--surface-2); color: var(--accent); }
 
