@@ -271,11 +271,33 @@
   }
   function closeSetup() {
     setupEl.hidden = true;
-    if (game && !game.over) {
+    if (game && !game.over && !game.userPaused) {
       resumeClock();
       if (game.mode === 'memory') $('type-input').focus();
     }
   }
+
+  // Pausa manual (botón ⏸ al lado del tiempo)
+  function setUserPause(on) {
+    if (!game || game.over || game.mode === 'explore') return;
+    game.userPaused = on;
+    if (on) { clearTimeout(pendingAccept); pauseClock(); } else resumeClock();
+    $('paused').hidden = !on;
+    $('type-input').disabled = on;
+    updatePauseBtn();
+    tick();
+    if (!on && game.mode === 'memory') $('type-input').focus();
+  }
+  function updatePauseBtn() {
+    const b = $('btn-pause');
+    const on = !!(game && game.userPaused);
+    b.classList.toggle('is-paused', on);
+    b.title = on ? 'Reanudar el tiempo' : 'Pausar el tiempo';
+    b.setAttribute('aria-label', b.title);
+    $('stat-time').classList.toggle('paused', on);
+  }
+  $('btn-pause').addEventListener('click', () => setUserPause(!(game && game.userPaused)));
+  $('btn-resume').addEventListener('click', () => setUserPause(false));
   $('btn-options').addEventListener('click', openSetup);
   $('setup-cancel').addEventListener('click', closeSetup);
   $('btn-start').addEventListener('click', () => {
@@ -318,11 +340,14 @@
     $('stat-score').hidden = mode === 'explore';
     $('stat-time').hidden = mode === 'explore';
     $('btn-restart').hidden = mode === 'explore';
+    $('btn-pause').hidden = mode === 'explore';
+    $('paused').hidden = true;
+    updatePauseBtn();
     showNames = false;
     $('time-label').textContent = game.timerOn ? 'Queda' : 'Tiempo';
     $('btn-skip').hidden = mode !== 'locate';
     $('btn-list').hidden = mode === 'locate';
-    $('btn-list').textContent = 'Ver lista';
+    setListBtn(false);
     $('btn-end').hidden = mode === 'explore';
     $('btn-end').textContent = mode === 'memory' ? 'Me rindo' : 'Terminar';
     $('prompt').hidden = mode !== 'locate';
@@ -428,7 +453,7 @@
     setTimeout(() => rmCls(c, 'wrong'), 900);
   }
   $('btn-skip').addEventListener('click', () => {
-    if (!game || game.over || game.mode !== 'locate' || game.locked || !game.current) return;
+    if (!game || game.over || game.mode !== 'locate' || game.locked || game.userPaused || !game.current) return;
     game.queue.push(game.current);
     nextQuestion();
   });
@@ -454,7 +479,7 @@
   }
   function tryMatch(enter) {
     clearTimeout(pendingAccept);
-    if (!game || game.over || game.mode !== 'memory') return;
+    if (!game || game.over || game.mode !== 'memory' || game.userPaused) return;
     const raw = input.value;
     if (!raw.trim()) { if (!enter) setHint(''); return; }
     const m = matchInput(raw);
@@ -545,6 +570,10 @@
     input.disabled = true;
     $('btn-skip').hidden = true;
     $('btn-end').hidden = true;
+    $('btn-pause').hidden = true;
+    $('paused').hidden = true;
+    game.userPaused = false;
+    updatePauseBtn();
     $('btn-list').hidden = false;
     if (!$('drawer').hidden) renderList();
     showResults(reason);
@@ -624,6 +653,7 @@
   function onCountry(e, c) {
     if (!inRegion.has(c)) return;
     if (!setupEl.hidden || !$('results').hidden) return;
+    if (game && !game.over && game.userPaused) return;
     if (game && !game.over && game.mode === 'locate') { onLocate(c); return; }
     if (game && !game.over && game.mode === 'memory') {
       if (c.status) showInfo(c);
@@ -651,15 +681,21 @@
   const search = $('drawer-search');
   function openDrawer() {
     drawer.hidden = false;
-    $('btn-list').textContent = 'Ocultar lista';
+    setListBtn(true);
     const clickable = !game || game.over || game.mode === 'explore';
     search.hidden = !clickable;
     search.value = '';
     renderList();
   }
+  function setListBtn(open) {
+    // En pantallas chicas el botón dice solo "Lista" para que la barra entre en un renglón
+    const b = $('btn-list');
+    b.innerHTML = `<span class="hide-sm">${open ? 'Ocultar lista' : 'Ver lista'}</span><span class="show-sm">Lista</span>`;
+    b.classList.toggle('on', open);
+  }
   function closeDrawer() {
     drawer.hidden = true;
-    $('btn-list').textContent = 'Ver lista';
+    setListBtn(false);
   }
   $('btn-list').addEventListener('click', () => (drawer.hidden ? openDrawer() : closeDrawer()));
   $('drawer-close').addEventListener('click', closeDrawer);

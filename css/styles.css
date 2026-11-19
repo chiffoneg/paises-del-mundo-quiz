@@ -163,6 +163,33 @@ svg { flex-shrink: 0; }
 }
 .hud-stats { display: flex; align-items: center; gap: 22px; }
 #btn-restart svg { width: 19px; height: 19px; }
+.show-sm { display: none; }
+#btn-list.on { border-color: var(--accent); color: var(--accent); }
+#btn-pause svg { width: 17px; height: 17px; fill: currentColor; stroke: none; }
+#btn-pause .i-play { display: none; }
+#btn-pause.is-paused { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+#btn-pause.is-paused .i-play { display: block; }
+#btn-pause.is-paused .i-pause { display: none; }
+#stat-time.paused .stat-value { color: var(--muted); animation: blink 1.4s steps(2) infinite; }
+
+/* Pausa */
+.paused-overlay {
+  position: absolute; inset: 0; z-index: 7;
+  display: grid; place-items: center; padding: 16px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  animation: fade .15s ease;
+}
+@keyframes fade { from { opacity: 0; } }
+.paused-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  padding: 24px 32px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+.paused-card svg { width: 36px; height: 36px; fill: var(--accent); margin-bottom: 4px; }
+.paused-card strong { font-size: 22px; font-weight: 800; }
+.paused-card .btn { margin-top: 12px; }
 .stat { display: flex; flex-direction: column; align-items: center; line-height: 1.1; }
 .stat-label { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; }
 .stat-value { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
@@ -424,6 +451,7 @@ svg { flex-shrink: 0; }
 @media (max-width: 720px) {
   body { font-size: 14px; }
   .hide-sm { display: none; }
+  .show-sm { display: inline; }
   .topbar { padding: 6px 10px; }
   .brand { font-size: 15px; }
   .brand-icon { width: 24px; height: 24px; }
@@ -432,7 +460,7 @@ svg { flex-shrink: 0; }
   .hud-stats { gap: 10px; }
   .stat-label { font-size: 10px; }
   .stat-value { font-size: 18px; }
-  #btn-restart { width: 32px; height: 32px; }
+  #btn-restart, #btn-pause { width: 32px; height: 32px; }
   .hud-actions { flex: 1 1 auto; gap: 4px; }
   .hud-actions .btn { height: 32px; padding: 0 8px; font-size: 12.5px; }
   .modes { grid-template-columns: 1fr; }

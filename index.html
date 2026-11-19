@@ -57,6 +57,10 @@
         <span class="stat-label" id="time-label">Tiempo</span>
         <span class="stat-value mono" id="time-value">0:00</span>
       </div>
+      <button class="btn icon" id="btn-pause" type="button" title="Pausar el tiempo" aria-label="Pausar el tiempo">
+        <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>
+      </button>
     </div>
     <div class="hud-actions">
       <button class="btn" id="btn-skip" type="button">Saltar</button>
@@ -92,6 +96,16 @@
         <strong id="info-name"></strong>
         <span id="info-capital"></span>
         <span class="muted" id="info-cont"></span>
+      </div>
+    </div>
+
+    <!-- Pausa -->
+    <div class="paused-overlay" id="paused" hidden>
+      <div class="paused-card">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <strong>En pausa</strong>
+        <span class="muted">El tiempo está frenado.</span>
+        <button type="button" class="btn primary big" id="btn-resume">Reanudar</button>
       </div>
     </div>
 
