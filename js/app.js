@@ -797,7 +797,7 @@
     foHint('');
     fillReveal($('fo-reveal'), t, t.status === 'ok1' ? 'ok' : 'ok2', 'Enter para seguir');
     game.locked = true;
-    advanceT = setTimeout(nextFlag, 2300);
+    advanceT = setTimeout(nextFlag, 1150);
   }
   function foFail(msg) {
     const t = game.current;
