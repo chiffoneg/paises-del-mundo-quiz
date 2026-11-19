@@ -809,7 +809,7 @@
     foHint(msg || '', 'bad');
     fillReveal($('fo-reveal'), t, 'miss', 'Enter para seguir');
     game.locked = true;
-    advanceT = setTimeout(nextFlag, 3300);
+    advanceT = setTimeout(nextFlag, 1650);
   }
   foInput.addEventListener('input', () => foTry(false));
   $('fo-form').addEventListener('submit', e => { e.preventDefault(); foTry(true); });
