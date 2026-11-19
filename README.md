@@ -10,7 +10,9 @@ Página para estudiar los **195 países del mundo** (193 de la ONU + Vaticano y 
 - **Modo Ubicar:** te muestra el nombre y la bandera de un país y lo tenés que marcar en el mapa. 3 intentos por país; si fallás, te lo marca en rojo.
 - **Modo De memoria:** escribís todos los países que te acuerdes y se van pintando en el mapa. Botón "Ver lista" con los que ya pusiste en verde.
 - **Modo Explorar:** tocás cualquier país y te muestra nombre, bandera y capital.
-- **Contador** de correctas (ej: 3/12) y **timer** personalizado para hacerlo tipo prueba.
+- **Banderas – De a una:** te muestra una bandera y escribís de qué país es (3 intentos, con "No sé" y "Saltar"). Al responder te muestra un mapita con el país.
+- **Banderas – Todas juntas:** ves todas las banderas de la región y vas escribiendo los países que reconocés (intentos ilimitados).
+- **Contador** de correctas (ej: 3/12) y **timer** personalizado para hacerlo tipo prueba, con pausa y botón de reiniciar.
 - Zoom en el mapa y círculos para los países muy chicos.
 - Modo claro / oscuro. Funciona en compu y celular.
 

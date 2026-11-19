@@ -12,7 +12,12 @@
     { key: 'OC', name: 'Oceanía', box: [110, -48, 190, 16] },
   ];
   const REGION_BY_KEY = Object.fromEntries(REGIONS.map(r => [r.key, r]));
-  const MODE_NAMES = { locate: 'Ubicar en el mapa', memory: 'De memoria', explore: 'Explorar' };
+  const MODE_NAMES = {
+    locate: 'Ubicar en el mapa', memory: 'De memoria', explore: 'Explorar',
+    flagOne: 'Banderas de a una', flagGrid: 'Banderas todas juntas',
+  };
+  const COUNTRY_MODES = ['locate', 'memory', 'explore'];
+  const FLAG_MODES = ['flagOne', 'flagGrid'];
   const MERGE_INTO = { 'Somaliland': '706', 'N. Cyprus': '196' }; // se dibujan como parte de Somalia / Chipre
   const POINTS = { '798': [179.2, -8.52] }; // Tuvalu no viene dibujado en el mapa
   const SMALL_AREA = 1.6e-4; // estereorradianes (~6.500 km²): debajo de esto lleva círculo
@@ -207,10 +212,12 @@
   const saved = store.get('pdm-settings') || {};
   const settings = {
     region: REGION_BY_KEY[saved.region] ? saved.region : 'WORLD',
-    mode: MODE_NAMES[saved.mode] ? saved.mode : 'locate',
+    mode: COUNTRY_MODES.includes(saved.mode) ? saved.mode : 'locate',
+    flagMode: FLAG_MODES.includes(saved.flagMode) ? saved.flagMode : 'flagOne',
     timerOn: !!saved.timerOn,
     secs: Number.isFinite(saved.secs) && saved.secs > 0 ? saved.secs : 300,
   };
+  let setupKind = saved.kind === 'flags' ? 'flags' : 'countries'; // qué juego se configura: 'countries' | 'flags'
   let game = null;
   let selected = null;
   let ticker = null;
@@ -229,11 +236,15 @@
   regionChips.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     settings.region = b.dataset.region; renderSetup();
-    if (!game || game.over) { inRegion = regionSet(settings.region); paintAll(); goRegion(true); }
+    if ((!game || game.over) && !$('stage').hidden) { inRegion = regionSet(settings.region); paintAll(); goRegion(true); }
   });
   $('mode-cards').addEventListener('click', e => {
     const b = e.target.closest('.mode'); if (!b) return;
     settings.mode = b.dataset.mode; renderSetup();
+  });
+  $('flag-mode-cards').addEventListener('click', e => {
+    const b = e.target.closest('.mode'); if (!b) return;
+    settings.flagMode = b.dataset.fmode; renderSetup();
   });
   document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
     settings.timerOn = b.dataset.timer === 'on'; renderSetup();
@@ -253,17 +264,24 @@
   }
   function renderSetup() {
     regionChips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.region === settings.region));
-    document.querySelectorAll('.mode').forEach(b => b.classList.toggle('on', b.dataset.mode === settings.mode));
+    const flags = setupKind === 'flags';
+    $('setup-title').textContent = flags ? 'Estudiá las banderas del mundo' : 'Estudiá los países del mundo';
+    $('mode-cards').hidden = flags;
+    $('flag-mode-cards').hidden = !flags;
+    document.querySelectorAll('#mode-cards .mode').forEach(b => b.classList.toggle('on', b.dataset.mode === settings.mode));
+    document.querySelectorAll('#flag-mode-cards .mode').forEach(b => b.classList.toggle('on', b.dataset.fmode === settings.flagMode));
     document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', (b.dataset.timer === 'on') === settings.timerOn));
-    $('timer-section').hidden = settings.mode === 'explore';
+    const explore = !flags && settings.mode === 'explore';
+    $('timer-section').hidden = explore;
     $('timer-cfg').classList.toggle('disabled', !settings.timerOn);
     $('t-min').value = Math.floor(settings.secs / 60);
     $('t-sec').value = settings.secs % 60;
     highlightPreset();
-    $('btn-start').textContent = settings.mode === 'explore' ? 'Explorar' : 'Empezar';
+    $('btn-start').textContent = explore ? 'Explorar' : 'Empezar';
   }
-  function openSetup() {
+  function openSetup(kind) {
     if (game && !game.over) pauseClock();
+    setupKind = kind || (game ? game.kind : setupKind);
     $('setup-cancel').hidden = !game;
     $('results').hidden = true;
     renderSetup();
@@ -273,9 +291,15 @@
     setupEl.hidden = true;
     if (game && !game.over && !game.userPaused) {
       resumeClock();
-      if (game.mode === 'memory') $('type-input').focus();
+      focusInput();
     }
   }
+  function focusInput() {
+    if (!game || game.over) return;
+    const id = { memory: 'type-input', flagOne: 'fo-input', flagGrid: 'fg-input' }[game.mode];
+    if (id) $(id).focus();
+  }
+  const GAME_INPUTS = ['type-input', 'fo-input', 'fg-input'];
 
   // Pausa manual (botón ⏸ al lado del tiempo)
   function setUserPause(on) {
@@ -283,10 +307,10 @@
     game.userPaused = on;
     if (on) { clearTimeout(pendingAccept); pauseClock(); } else resumeClock();
     $('paused').hidden = !on;
-    $('type-input').disabled = on;
+    GAME_INPUTS.forEach(id => { $(id).disabled = on; });
     updatePauseBtn();
     tick();
-    if (!on && game.mode === 'memory') $('type-input').focus();
+    if (!on) focusInput();
   }
   function updatePauseBtn() {
     const b = $('btn-pause');
@@ -298,11 +322,12 @@
   }
   $('btn-pause').addEventListener('click', () => setUserPause(!(game && game.userPaused)));
   $('btn-resume').addEventListener('click', () => setUserPause(false));
-  $('btn-options').addEventListener('click', openSetup);
+  $('btn-countries').addEventListener('click', () => openSetup('countries'));
+  $('btn-flags').addEventListener('click', () => openSetup('flags'));
   $('setup-cancel').addEventListener('click', closeSetup);
   $('btn-start').addEventListener('click', () => {
     if (settings.timerOn && settings.secs <= 0) settings.secs = 60;
-    store.set('pdm-settings', settings);
+    store.set('pdm-settings', Object.assign({ kind: setupKind }, settings));
     startGame();
   });
 
@@ -317,11 +342,14 @@
 
   function startGame() {
     stopTicker();
-    const mode = settings.mode;
+    clearTimeout(advanceT);
+    clearTimeout(pendingAccept);
+    const kind = setupKind;
+    const mode = kind === 'flags' ? settings.flagMode : settings.mode;
     inRegion = regionSet(settings.region);
     const list = [...inRegion];
     game = {
-      mode, region: settings.region, list, total: list.length,
+      kind, mode, region: settings.region, list, total: list.length,
       correct: 0, first: 0, misses: [], found: new Set(),
       queue: shuffle(list.slice()), current: null, attempts: 0, locked: false, over: false,
       timerOn: mode !== 'explore' && settings.timerOn, limitMs: settings.secs * 1000,
@@ -346,21 +374,38 @@
     showNames = false;
     $('time-label').textContent = game.timerOn ? 'Queda' : 'Tiempo';
     $('btn-skip').hidden = mode !== 'locate';
-    $('btn-list').hidden = mode === 'locate';
+    $('btn-list').hidden = mode !== 'memory' && mode !== 'explore';
     setListBtn(false);
     $('btn-end').hidden = mode === 'explore';
-    $('btn-end').textContent = mode === 'memory' ? 'Me rindo' : 'Terminar';
+    $('btn-end').textContent = mode === 'memory' || mode === 'flagGrid' ? 'Me rindo' : 'Terminar';
     $('prompt').hidden = mode !== 'locate';
     $('typebox').hidden = mode !== 'memory';
-    $('type-input').disabled = false;
-    $('type-input').value = '';
+    GAME_INPUTS.forEach(id => { $(id).disabled = false; $(id).value = ''; });
     setHint('');
     updateScore(false);
-    requestAnimationFrame(() => { layout(); goRegion(true); });
+    $('btn-countries').classList.toggle('on', kind === 'countries');
+    $('btn-flags').classList.toggle('on', kind === 'flags');
+
+    // Pantalla: mapa grande (países) o banderas
+    $('stage').hidden = kind === 'flags';
+    $('flagstage').hidden = kind !== 'flags';
+    $('flag-one').hidden = mode !== 'flagOne';
+    $('flag-grid').hidden = mode !== 'flagGrid';
+    $('fg-form').hidden = false;
+    hideFloatingReveal();
+    if (kind === 'countries') requestAnimationFrame(() => { layout(); goRegion(true); });
 
     if (mode === 'locate') nextQuestion();
     if (mode === 'memory') setTimeout(() => $('type-input').focus(), 50);
     if (mode === 'explore') toast('Tocá un país para ver su nombre, bandera y capital');
+    if (mode === 'flagOne') nextFlag();
+    if (mode === 'flagGrid') {
+      game.gridOrder = shuffle(list.slice());
+      buildGrid(game.gridOrder);
+      setGridHint('');
+      $('flagstage').scrollTop = 0;
+      setTimeout(() => $('fg-input').focus(), 50);
+    }
     if (mode !== 'explore') { tick(); ticker = setInterval(tick, 200); }
   }
 
@@ -452,11 +497,13 @@
     addCls(c, 'wrong');
     setTimeout(() => rmCls(c, 'wrong'), 900);
   }
-  $('btn-skip').addEventListener('click', () => {
-    if (!game || game.over || game.mode !== 'locate' || game.locked || game.userPaused || !game.current) return;
-    game.queue.push(game.current);
-    nextQuestion();
-  });
+  function skipCurrent() {
+    if (!game || game.over || game.locked || game.userPaused || !game.current) return;
+    if (game.mode !== 'locate' && game.mode !== 'flagOne') return;
+    game.queue.push(game.current); // la deja para el final
+    if (game.mode === 'locate') nextQuestion(); else nextFlag();
+  }
+  $('btn-skip').addEventListener('click', skipCurrent);
 
   // Modo memoria
   const input = $('type-input');
@@ -477,55 +524,60 @@
   function hasLongerPrefix(k, c) {
     return game.list.some(o => o !== c && !game.found.has(o) && o.keys.some(x => x.length > k.length && x.startsWith(k)));
   }
-  function tryMatch(enter) {
+  // Escribir países de memoria: lo usan "De memoria" (mapa) y "Banderas todas juntas" (grilla)
+  function tryMatch(enter, ui) {
     clearTimeout(pendingAccept);
-    if (!game || game.over || game.mode !== 'memory' || game.userPaused) return;
-    const raw = input.value;
-    if (!raw.trim()) { if (!enter) setHint(''); return; }
+    if (!game || game.over || game.mode !== ui.mode || game.userPaused) return;
+    const raw = ui.input.value;
+    if (!raw.trim()) { if (!enter) ui.hint(''); return; }
     const m = matchInput(raw);
     if (!m) {
       if (enter) {
-        setHint(`“${escapeHtml(raw.trim())}” no está en la lista`);
-        shakeBox();
+        ui.hint(`“${escapeHtml(raw.trim())}” no está en la lista`);
+        ui.shake();
       }
       return;
     }
     const { c, k } = m;
     if (!inRegion.has(c)) {
-      setHint(`${c.name} no está en ${REGION_BY_KEY[game.region].name}`);
-      if (enter) { input.value = ''; shakeBox(); }
+      ui.hint(`${c.name} no está en ${REGION_BY_KEY[game.region].name}`);
+      if (enter) { ui.input.value = ''; ui.shake(); }
       return;
     }
     if (game.found.has(c)) {
-      setHint(`Ya pusiste ${c.name}`);
-      if (enter) input.value = '';
+      ui.hint(`Ya pusiste ${c.name}`);
+      if (enter) ui.input.value = '';
       return;
     }
     if (!enter && hasLongerPrefix(k, c)) {
-      setHint(`¿${c.name}? Apretá Enter o esperá un segundo…`);
-      pendingAccept = setTimeout(() => accept(c), 1300);
+      ui.hint(`¿${c.name}? Apretá Enter o esperá un segundo…`);
+      pendingAccept = setTimeout(() => ui.accept(c), 1300);
       return;
     }
-    accept(c);
+    ui.accept(c);
   }
-  function accept(c) {
-    if (!game || game.over || game.found.has(c)) return;
+  function markFound(c) {
+    if (!game || game.over || game.found.has(c)) return false;
     game.found.add(c);
     game.correct++;
     c.status = 'found';
-    paint(c);
     updateScore(true);
+    return true;
+  }
+  function accept(c) {
+    if (!markFound(c)) return;
+    paint(c);
     input.value = '';
     setHint(`✓ ${c.name} <span class="muted">· ${c.capital}</span>`, 'good');
     if (!$('drawer').hidden) renderList();
     if (game.correct === game.total) finish('done');
   }
-  function shakeBox() {
-    const b = $('typebox');
-    b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake');
+  function shake(el) {
+    el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake');
   }
-  input.addEventListener('input', () => tryMatch(false));
-  $('typebox').addEventListener('submit', e => { e.preventDefault(); tryMatch(true); });
+  const memUI = { mode: 'memory', input, hint: setHint, shake: () => shake($('typebox')), accept: c => accept(c) };
+  input.addEventListener('input', () => tryMatch(false, memUI));
+  $('typebox').addEventListener('submit', e => { e.preventDefault(); tryMatch(true, memUI); });
 
   // Reiniciar: misma región, modo y tiempo que la partida actual
   $('btn-restart').addEventListener('click', () => {
@@ -533,7 +585,8 @@
     const hasProgress = !game.over && (game.correct > 0 || game.misses.length > 0);
     if (hasProgress && !window.confirm('¿Reiniciar el juego? Vas a perder lo que llevás.')) return;
     settings.region = game.region;
-    settings.mode = game.mode;
+    if (game.kind === 'flags') settings.flagMode = game.mode; else settings.mode = game.mode;
+    setupKind = game.kind;
     settings.timerOn = game.timerOn;
     if (game.timerOn) settings.secs = Math.round(game.limitMs / 1000);
     startGame();
@@ -559,22 +612,35 @@
       const rest = (game.current && !game.current.status ? [game.current] : []).concat(game.queue);
       rest.forEach(c => { if (!c.status) { c.status = 'miss'; game.misses.push(c); } });
       game.current = null;
-    } else if (game.mode === 'memory') {
+    } else if (game.mode === 'memory' || game.mode === 'flagGrid') {
       game.list.forEach(c => { if (!game.found.has(c)) { c.status = 'miss'; game.misses.push(c); } });
       game.misses.sort(byName);
+    } else if (game.mode === 'flagOne') {
+      clearTimeout(advanceT);
+      const rest = (game.current && !game.current.status ? [game.current] : []).concat(game.queue);
+      rest.forEach(c => { if (!c.status) { c.status = 'miss'; game.misses.push(c); } });
+      game.current = null;
     }
-    paintAll();
+    if (game.kind === 'countries') paintAll();
+    if (game.kind === 'flags') {
+      // Al terminar se ven todas las banderas con su nombre y el resultado
+      $('flag-one').hidden = true;
+      $('flag-grid').hidden = false;
+      $('fg-form').hidden = true;
+      buildGrid(game.mode === 'flagGrid' ? game.gridOrder : game.list.slice().sort(byName));
+      $('flagstage').scrollTop = 0;
+    }
 
     $('prompt').hidden = true;
     $('typebox').hidden = true;
-    input.disabled = true;
+    GAME_INPUTS.forEach(id => { $(id).disabled = true; });
     $('btn-skip').hidden = true;
     $('btn-end').hidden = true;
     $('btn-pause').hidden = true;
     $('paused').hidden = true;
     game.userPaused = false;
     updatePauseBtn();
-    $('btn-list').hidden = false;
+    $('btn-list').hidden = game.kind === 'flags';
     if (!$('drawer').hidden) renderList();
     showResults(reason);
   }
@@ -588,8 +654,9 @@
     $('res-total').textContent = g.total;
     const pct = Math.round(100 * g.correct / g.total);
     const parts = [`${pct}%`, `tiempo: ${fmt(Math.round(g.elapsedMs / 1000))}`];
-    if (g.mode === 'locate') parts.push(`${g.first} a la primera`);
+    if (g.mode === 'locate' || g.mode === 'flagOne') parts.push(`${g.first} a la primera`);
     $('res-sub').textContent = parts.join(' · ');
+    $('res-map').textContent = g.kind === 'flags' ? 'Ver banderas' : 'Ver mapa';
     const ul = $('res-missed');
     ul.innerHTML = '';
     g.misses.forEach(c => {
@@ -598,15 +665,200 @@
       ul.appendChild(li);
     });
     $('res-missed-wrap').hidden = !g.misses.length;
-    $('res-missed-title').textContent = g.mode === 'locate' ? `Para repasar (${g.misses.length})` : `Te faltaron (${g.misses.length})`;
+    $('res-missed-title').textContent = g.mode === 'locate' || g.mode === 'flagOne'
+      ? `Para repasar (${g.misses.length})` : `Te faltaron (${g.misses.length})`;
     $('results').hidden = false;
   }
   $('res-map').addEventListener('click', () => {
     $('results').hidden = true;
-    toast('Tocá cualquier país para ver cuál es');
+    toast(game && game.kind === 'flags' ? 'Tocá una bandera para ver dónde queda' : 'Tocá cualquier país para ver cuál es');
   });
-  $('res-options').addEventListener('click', openSetup);
+  $('res-options').addEventListener('click', () => openSetup());
   $('res-again').addEventListener('click', startGame);
+
+  // ───────── Banderas ─────────
+  let advanceT = null;
+  const foInput = $('fo-input');
+  const fgInput = $('fg-input');
+
+  function foHint(html, cls) {
+    const h = $('fo-hint');
+    h.innerHTML = html;
+    h.className = 'fo-hint' + (cls ? ' ' + cls : '');
+  }
+  function updateFoTries() {
+    $('fo-tries').querySelectorAll('i').forEach((d, i) => d.classList.toggle('used', i < game.attempts));
+  }
+  function nextFlag() {
+    clearTimeout(advanceT);
+    if (!game || game.over || game.mode !== 'flagOne') return;
+    if (!game.queue.length) { game.current = null; finish('done'); return; }
+    const c = game.current = game.queue.shift();
+    game.attempts = 0; game.locked = false;
+    $('fo-flag').src = flagUrl(c.iso, 640);
+    $('fo-reveal').hidden = true;
+    foHint('');
+    foInput.value = '';
+    updateFoTries();
+    const w = $('fo-flagwrap');
+    w.classList.remove('pop'); void w.offsetWidth; w.classList.add('pop');
+    if (game.queue[0]) { const pre = new Image(); pre.src = flagUrl(game.queue[0].iso, 640); }
+    if (!game.userPaused && setupEl.hidden) foInput.focus();
+  }
+  function foTry(enter) {
+    if (!game || game.over || game.mode !== 'flagOne' || game.userPaused || !game.current) return;
+    if (game.locked) { if (enter) nextFlag(); return; } // Enter salta la espera
+    const raw = foInput.value;
+    if (!raw.trim()) return;
+    const m = matchInput(raw);
+    if (m && m.c === game.current) { foCorrect(); return; }
+    if (!enter) return; // los errores solo cuentan al apretar Enter
+    if (!m) {
+      foHint(`No reconozco “${escapeHtml(raw.trim())}”. Probá de nuevo <span class="muted">(no cuenta como intento)</span>`);
+      shake($('fo-form'));
+      return;
+    }
+    game.attempts++;
+    updateFoTries();
+    foInput.value = '';
+    shake($('fo-form'));
+    if (game.attempts >= MAX_TRIES) { foFail(`No es ${m.c.name}.`); return; }
+    const left = MAX_TRIES - game.attempts;
+    foHint(`✗ No es ${m.c.name}. Te ${left === 1 ? 'queda 1 intento' : `quedan ${left} intentos`}.`, 'bad');
+  }
+  function foCorrect() {
+    const t = game.current;
+    game.correct++;
+    if (game.attempts === 0) game.first++;
+    t.status = game.attempts === 0 ? 'ok1' : 'ok2';
+    updateScore(true);
+    foInput.value = '';
+    foHint('');
+    fillReveal($('fo-reveal'), t, t.status === 'ok1' ? 'ok' : 'ok2', 'Enter para seguir');
+    game.locked = true;
+    advanceT = setTimeout(nextFlag, 2300);
+  }
+  function foFail(msg) {
+    const t = game.current;
+    t.status = 'miss';
+    game.misses.push(t);
+    game.attempts = MAX_TRIES;
+    updateFoTries();
+    foInput.value = '';
+    foHint(msg || '', 'bad');
+    fillReveal($('fo-reveal'), t, 'miss', 'Enter para seguir');
+    game.locked = true;
+    advanceT = setTimeout(nextFlag, 3300);
+  }
+  foInput.addEventListener('input', () => foTry(false));
+  $('fo-form').addEventListener('submit', e => { e.preventDefault(); foTry(true); });
+  $('fo-idk').addEventListener('click', () => {
+    if (!game || game.over || game.mode !== 'flagOne' || game.locked || game.userPaused || !game.current) return;
+    foFail('');
+  });
+  $('fo-skip').addEventListener('click', skipCurrent);
+
+  // Grilla
+  function buildGrid(order) {
+    const frag = document.createDocumentFragment();
+    order.forEach(c => {
+      const li = document.createElement('li');
+      li.dataset.id = c.id;
+      li.innerHTML = `<div class="fg-flag"><img src="${flagUrl(c.iso, 160)}" srcset="${flagUrl(c.iso, 320)} 2x" alt="Bandera" loading="lazy"></div><span class="fg-name"></span>`;
+      c.gridEl = li;
+      paintGridItem(c);
+      frag.appendChild(li);
+    });
+    $('fg-grid').replaceChildren(frag);
+  }
+  function paintGridItem(c) {
+    const li = c.gridEl;
+    if (!li) return;
+    const st = c.status === 'found' ? 'ok1' : c.status;
+    li.className = 'fg-item' + (st ? ' ' + st : '');
+    li.querySelector('.fg-name').textContent = st ? c.name : '?';
+  }
+  function setGridHint(html, cls) {
+    $('fg-hint').innerHTML = html;
+    $('fg-form').classList.toggle('good', cls === 'good');
+  }
+  function acceptGrid(c) {
+    if (!markFound(c)) return;
+    paintGridItem(c);
+    fgInput.value = '';
+    setGridHint(`✓ ${c.name} <span class="muted">· ${c.capital}</span>`, 'good');
+    c.gridEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    c.gridEl.classList.add('pop');
+    showFloatingReveal(c, 'ok', 2600);
+    if (game.correct === game.total) finish('done');
+  }
+  const gridUI = { mode: 'flagGrid', input: fgInput, hint: setGridHint, shake: () => shake($('fg-form')), accept: acceptGrid };
+  fgInput.addEventListener('input', () => tryMatch(false, gridUI));
+  $('fg-form').addEventListener('submit', e => { e.preventDefault(); tryMatch(true, gridUI); });
+  $('fg-grid').addEventListener('click', e => {
+    const li = e.target.closest('.fg-item');
+    if (!li) return;
+    const c = byId.get(li.dataset.id);
+    if (game && !game.over && !c.status) { focusInput(); return; }
+    const st = c.status === 'miss' ? 'miss' : c.status === 'ok2' ? 'ok2' : 'ok';
+    showFloatingReveal(c, st, 0);
+  });
+
+  // Ficha con mapita (globo) del país
+  let floatT = null;
+  function showFloatingReveal(c, state, autoHideMs) {
+    clearTimeout(floatT);
+    fillReveal($('fg-reveal'), c, state, '', true);
+    if (autoHideMs) floatT = setTimeout(hideFloatingReveal, autoHideMs);
+  }
+  function hideFloatingReveal() {
+    clearTimeout(floatT);
+    $('fg-reveal').hidden = true;
+  }
+  function fillReveal(el, c, state, note, closable) {
+    const title = state === 'miss' ? `✗ Era ${c.name}` : `✓ ${c.name}`;
+    el.className = 'reveal ' + state + (el.id === 'fg-reveal' ? ' floating' : '');
+    el.innerHTML =
+      (closable ? '<button class="close" type="button" aria-label="Cerrar">×</button>' : '') +
+      `<div class="globe"><svg aria-hidden="true"></svg></div>
+       <div class="reveal-text">
+         <strong>${title}</strong>
+         <span>Capital: ${c.capital}</span>
+         <span class="muted">${CONT_NAMES[c.cont]}</span>
+         ${note ? `<span class="reveal-note">${note}</span>` : ''}
+       </div>`;
+    if (closable) el.querySelector('.close').addEventListener('click', hideFloatingReveal);
+    el.hidden = false;
+    drawGlobe(el.querySelector('svg'), c, state);
+  }
+  let globeLand = null, globeBorders = null;
+  function drawGlobe(svgEl, c, state) {
+    if (!globeLand) {
+      const geoms = topo.objects.countries.geometries.filter(g => !(g.properties && g.properties.name === 'Antarctica'));
+      globeLand = topojson.merge(topo, geoms);
+      globeBorders = topojson.mesh(topo, topo.objects.countries, (a, b) => a !== b);
+    }
+    const S = 160;
+    // Acercamos más cuanto más chico es el país
+    const r = c.isPoint ? 0.003 : Math.sqrt(c.area / Math.PI);
+    const k = Math.max(1, Math.min(5, 0.32 / Math.max(r, 0.004)));
+    const proj = d3.geoOrthographic()
+      .rotate([-c.anchor[0], -c.anchor[1]])
+      .translate([S / 2, S / 2]).scale((S / 2 - 1) * k)
+      .clipAngle(90).clipExtent([[0, 0], [S, S]]).precision(0.4);
+    const p = d3.geoPath(proj);
+    const s = d3.select(svgEl).attr('viewBox', `0 0 ${S} ${S}`);
+    s.selectAll('*').remove();
+    s.append('path').datum({ type: 'Sphere' }).attr('class', 'gl-sphere').attr('d', p);
+    s.append('path').datum(d3.geoGraticule10()).attr('class', 'gl-grat').attr('d', p);
+    s.append('path').datum(globeLand).attr('class', 'gl-land').attr('d', p);
+    s.append('path').datum(globeBorders).attr('class', 'gl-border').attr('d', p);
+    if (!c.isPoint) s.append('path').datum(c.feature).attr('class', 'gl-target ' + state).attr('d', p);
+    if (c.small) {
+      const [x, y] = proj(c.anchor);
+      s.append('circle').attr('class', 'gl-ring ' + state).attr('cx', x).attr('cy', y).attr('r', 10);
+    }
+  }
 
   // ───────── Info de país / tooltip ─────────
   function canInspect(c) {
@@ -777,12 +1029,13 @@
     if (e.key === 'Escape') {
       if (!drawer.hidden) closeDrawer();
       else if (selected) clearSelection();
+      else if (!$('fg-reveal').hidden) hideFloatingReveal();
     }
   });
   let resizeT = null;
   window.addEventListener('resize', () => {
     clearTimeout(resizeT);
-    resizeT = setTimeout(() => { layout(); goRegion(false); }, 150);
+    resizeT = setTimeout(() => { if (!$('stage').hidden) { layout(); goRegion(false); } }, 150);
   });
   document.addEventListener('visibilitychange', () => {
     // el reloj sigue corriendo aunque cambies de pestaña (es una prueba)

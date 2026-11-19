@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Países del Mundo Quiz · Aprendé a ubicar los 195 países en el mapa</title>
-  <meta name="description" content="Quiz gratis para estudiar los 195 países del mundo: ubicá cada país en el mapa a partir de su nombre y bandera, o escribí de memoria todos los que te acuerdes. Por continente, con contador y timer.">
+  <title>Países del Mundo Quiz · Aprendé los 195 países en el mapa y sus banderas</title>
+  <meta name="description" content="Quiz gratis para estudiar los 195 países del mundo y sus banderas: ubicá cada país en el mapa, escribí de memoria todos los que te acuerdes o adiviná las banderas. Por continente, con contador y timer.">
   <meta name="keywords" content="países del mundo, quiz, mapa, banderas, capitales, geografía, juego, estudiar, continentes">
   <meta name="theme-color" content="#1f6f8b">
   <meta property="og:title" content="Países del Mundo Quiz">
@@ -26,12 +26,16 @@
   <header class="topbar">
     <a class="brand" href="./" aria-label="Países del Mundo Quiz">
       <svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29"/><path d="M3 32h58M32 3c-10 9-10 49 0 58M32 3c10 9 10 49 0 58M8 17h48M8 47h48"/></svg>
-      <span>Países del Mundo <em>Quiz</em></span>
+      <span class="brand-text">Países del Mundo <em>Quiz</em></span>
     </a>
     <div class="topbar-actions">
-      <button class="btn ghost" id="btn-options" type="button">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
-        <span class="hide-sm">Opciones</span>
+      <button class="btn ghost nav" id="btn-countries" type="button" title="Juegos de países en el mapa">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-3 3-3 15 0 18M12 3c3 3 3 15 0 18"/></svg>
+        <span>Países</span>
+      </button>
+      <button class="btn ghost nav" id="btn-flags" type="button" title="Juegos de banderas">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>
+        <span>Banderas</span>
       </button>
       <button class="btn ghost icon" id="btn-theme" type="button" aria-label="Cambiar tema claro / oscuro" title="Tema claro / oscuro">
         <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
@@ -69,6 +73,7 @@
     </div>
   </section>
 
+  <div class="arena" id="arena">
   <main class="stage" id="stage">
     <svg id="map" role="img" aria-label="Mapa del mundo"></svg>
 
@@ -99,18 +104,7 @@
       </div>
     </div>
 
-    <!-- Pausa -->
-    <div class="paused-overlay" id="paused" hidden>
-      <div class="paused-card">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-        <strong>En pausa</strong>
-        <span class="muted">El tiempo está frenado.</span>
-        <button type="button" class="btn primary big" id="btn-resume">Reanudar</button>
-      </div>
-    </div>
-
     <div class="tooltip" id="tooltip" hidden></div>
-    <div class="toast" id="toast" aria-live="polite"></div>
 
     <div class="zoom-ctrl">
       <button type="button" id="zoom-in" aria-label="Acercar">+</button>
@@ -136,11 +130,57 @@
     </aside>
   </main>
 
+  <!-- Juego de banderas -->
+  <section class="flagstage" id="flagstage" hidden>
+    <!-- De a una -->
+    <div class="fo" id="flag-one" hidden>
+      <div class="fo-flagwrap" id="fo-flagwrap">
+        <img id="fo-flag" alt="Bandera a adivinar">
+      </div>
+      <div class="tries" id="fo-tries" aria-label="Intentos restantes"><i></i><i></i><i></i></div>
+      <form class="fo-form" id="fo-form" autocomplete="off">
+        <input id="fo-input" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="¿De qué país es?" aria-label="Nombre del país">
+        <button class="btn primary" type="submit">Responder</button>
+      </form>
+      <div class="fo-actions">
+        <button class="btn" id="fo-idk" type="button">No sé</button>
+        <button class="btn" id="fo-skip" type="button" title="La dejo para el final">Saltar</button>
+      </div>
+      <div class="fo-hint" id="fo-hint" aria-live="polite"></div>
+      <div class="reveal" id="fo-reveal" hidden></div>
+    </div>
+
+    <!-- Todas juntas -->
+    <div class="fg" id="flag-grid" hidden>
+      <form class="fg-bar" id="fg-form" autocomplete="off">
+        <input id="fg-input" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Escribí un país y apretá Enter…" aria-label="Nombre del país">
+        <span class="type-hint" id="fg-hint" aria-live="polite"></span>
+      </form>
+      <ul class="fg-grid" id="fg-grid"></ul>
+    </div>
+  </section>
+
+  <!-- Ficha flotante (grilla de banderas) -->
+  <div class="reveal floating" id="fg-reveal" hidden></div>
+
+  <!-- Pausa -->
+  <div class="paused-overlay" id="paused" hidden>
+    <div class="paused-card">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      <strong>En pausa</strong>
+      <span class="muted">El tiempo está frenado.</span>
+      <button type="button" class="btn primary big" id="btn-resume">Reanudar</button>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" aria-live="polite"></div>
+  </div>
+
   <!-- Opciones -->
   <div class="modal-wrap" id="setup">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title">
       <h1 id="setup-title">Estudiá los países del mundo</h1>
-      <p class="lead">Elegí una región, un modo y, si querés, un tiempo límite para hacerlo tipo prueba.</p>
+      <p class="lead" id="setup-lead">Elegí una región, un modo y, si querés, un tiempo límite para hacerlo tipo prueba.</p>
 
       <h2>Región</h2>
       <div class="chips" id="region-chips"></div>
@@ -161,6 +201,18 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>
           <strong>Explorar</strong>
           <span>Tocá cualquier país para ver su nombre, bandera y capital. Ideal para estudiar.</span>
+        </button>
+      </div>
+      <div class="modes two" id="flag-mode-cards" hidden>
+        <button type="button" class="mode" data-fmode="flagOne">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M8 20h8"/></svg>
+          <strong>De a una</strong>
+          <span>Te muestro una bandera y escribís de qué país es. 3 intentos por bandera.</span>
+        </button>
+        <button type="button" class="mode" data-fmode="flagGrid">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7" height="5" rx="1"/><rect x="14" y="4" width="7" height="5" rx="1"/><rect x="3" y="14" width="7" height="5" rx="1"/><rect x="14" y="14" width="7" height="5" rx="1"/></svg>
+          <strong>Todas juntas</strong>
+          <span>Ves todas las banderas y vas escribiendo los países que reconocés. Intentos ilimitados.</span>
         </button>
       </div>
 
