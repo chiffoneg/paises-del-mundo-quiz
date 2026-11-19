@@ -46,6 +46,9 @@
       <span class="pill" id="hud-label">Todo el mundo · Ubicar</span>
     </div>
     <div class="hud-stats">
+      <button class="btn icon" id="btn-restart" type="button" title="Reiniciar el juego" aria-label="Reiniciar el juego">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/></svg>
+      </button>
       <div class="stat" id="stat-score" title="Correctas / total">
         <span class="stat-label">Correctas</span>
         <span class="stat-value"><b id="score-num">0</b>/<span id="score-total">0</span></span>
@@ -108,6 +111,10 @@
       <div class="drawer-head">
         <strong id="drawer-title">Países</strong>
         <span class="muted" id="drawer-count"></span>
+        <button class="btn small" id="btn-names" type="button" aria-pressed="false" hidden>
+          <svg class="i-eye" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Ver nombres</span>
+        </button>
         <button class="close" id="drawer-close" type="button" aria-label="Cerrar lista">×</button>
       </div>
       <input class="drawer-search" id="drawer-search" type="search" placeholder="Buscar…" hidden>

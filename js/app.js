@@ -317,6 +317,8 @@
     $('hud-label').textContent = `${REGION_BY_KEY[game.region].name} · ${MODE_NAMES[mode]}`;
     $('stat-score').hidden = mode === 'explore';
     $('stat-time').hidden = mode === 'explore';
+    $('btn-restart').hidden = mode === 'explore';
+    showNames = false;
     $('time-label').textContent = game.timerOn ? 'Queda' : 'Tiempo';
     $('btn-skip').hidden = mode !== 'locate';
     $('btn-list').hidden = mode === 'locate';
@@ -500,6 +502,18 @@
   input.addEventListener('input', () => tryMatch(false));
   $('typebox').addEventListener('submit', e => { e.preventDefault(); tryMatch(true); });
 
+  // Reiniciar: misma región, modo y tiempo que la partida actual
+  $('btn-restart').addEventListener('click', () => {
+    if (!game) return;
+    const hasProgress = !game.over && (game.correct > 0 || game.misses.length > 0);
+    if (hasProgress && !window.confirm('¿Reiniciar el juego? Vas a perder lo que llevás.')) return;
+    settings.region = game.region;
+    settings.mode = game.mode;
+    settings.timerOn = game.timerOn;
+    if (game.timerOn) settings.secs = Math.round(game.limitMs / 1000);
+    startGame();
+  });
+
   // Terminar
   $('btn-end').addEventListener('click', () => {
     if (!game || game.over) return;
@@ -650,13 +664,25 @@
   $('btn-list').addEventListener('click', () => (drawer.hidden ? openDrawer() : closeDrawer()));
   $('drawer-close').addEventListener('click', closeDrawer);
   search.addEventListener('input', renderList);
+  let showNames = false;
+  $('btn-names').addEventListener('click', () => {
+    showNames = !showNames;
+    renderList();
+  });
 
   function renderList() {
     const key = currentRegionKey();
     const list = [...inRegion].sort(byName);
     const clickable = !game || game.over || game.mode === 'explore';
+    const playingMemory = game && !game.over && game.mode === 'memory';
     const q = norm(search.value || '');
     listEl.classList.toggle('clickable', clickable);
+    const nb = $('btn-names');
+    nb.hidden = !playingMemory;
+    nb.setAttribute('aria-pressed', String(showNames));
+    nb.querySelector('span').textContent = showNames ? 'Ocultar' : 'Ver nombres';
+    nb.title = showNames ? 'Tapar los nombres de la lista' : 'Mostrar los nombres de la lista';
+    nb.classList.toggle('on', showNames);
     $('drawer-title').textContent = key === 'WORLD' ? 'Todos los países' : `Países de ${REGION_BY_KEY[key].name}`;
     $('drawer-count').textContent = game && game.mode !== 'explore' ? `${game.correct}/${game.total}` : `${list.length}`;
     const frag = document.createDocumentFragment();
@@ -674,9 +700,12 @@
         const li = document.createElement('li');
         const st = c.status === 'found' || c.status === 'ok1' || c.status === 'ok2' ? ' found' : c.status === 'miss' ? ' miss' : '';
         li.className = 'item' + st;
-        li.innerHTML = clickable
-          ? `<img src="${flagUrl(c.iso, 40)}" alt="" loading="lazy"><span>${c.name}</span>`
-          : `<span class="dot"></span><span>${c.name}</span>`;
+        // En modo memoria los nombres que todavía no pusiste quedan tapados (salvo que pidas verlos)
+        const hide = playingMemory && !showNames && c.status !== 'found';
+        const label = hide
+          ? `<span class="censored" style="width:${Math.max(3, Math.round(c.name.length * 0.62))}em" aria-label="Nombre oculto"></span>`
+          : `<span>${c.name}</span>`;
+        li.innerHTML = `<img src="${flagUrl(c.iso, 40)}" srcset="${flagUrl(c.iso, 80)} 2x" alt="" loading="lazy">${label}`;
         if (clickable) li.addEventListener('click', () => { showInfo(c); flyTo(c); if (window.innerWidth < 720) closeDrawer(); });
         frag.appendChild(li);
       });
