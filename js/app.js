@@ -2,16 +2,21 @@
   'use strict';
 
   // ───────── Configuración ─────────
-  const CONT_NAMES = { AF: 'África', AM: 'América', AS: 'Asia', EU: 'Europa', OC: 'Oceanía' };
+  // Regiones que se pueden elegir (una o varias). América va dividida en dos.
   const REGIONS = [
-    { key: 'WORLD', name: 'Todo el mundo', box: null },
     { key: 'AF', name: 'África', box: [-26, -36, 60, 38] },
-    { key: 'AM', name: 'América', box: [-168, -56, -30, 72] },
+    { key: 'NA', name: 'Norte y Centroamérica', box: [-168, 6, -52, 72] },
+    { key: 'SA', name: 'Sudamérica', box: [-82, -56, -34, 13] },
     { key: 'AS', name: 'Asia', box: [25, -12, 150, 56] },
     { key: 'EU', name: 'Europa', box: [-25, 34, 45, 71] },
     { key: 'OC', name: 'Oceanía', box: [110, -48, 190, 16] },
   ];
+  const REGION_KEYS = REGIONS.map(r => r.key);
   const REGION_BY_KEY = Object.fromEntries(REGIONS.map(r => [r.key, r]));
+  const REG_NAMES = Object.fromEntries(REGIONS.map(r => [r.key, r.name]));
+  const SOUTH_AMERICA = ['ar', 'bo', 'br', 'cl', 'co', 'ec', 'gy', 'py', 'pe', 'sr', 'uy', 've'];
+  const isWorld = regs => REGION_KEYS.every(k => regs.includes(k));
+  const regionLabel = regs => isWorld(regs) ? 'Todo el mundo' : REGION_KEYS.filter(k => regs.includes(k)).map(k => REG_NAMES[k]).join(' + ');
   const MODE_NAMES = {
     locate: 'Ubicar en el mapa', memory: 'De memoria', explore: 'Explorar',
     flagOne: 'Banderas de a una', flagGrid: 'Banderas todas juntas',
@@ -36,6 +41,8 @@
   // ───────── Datos ─────────
   const countries = window.COUNTRIES_RAW.map(([id, iso, name, capital, cont, alt]) => ({
     id, iso, name, capital, cont, keys: [name, ...alt].map(norm), status: null,
+    // región para elegir: América se divide en Sudamérica (SA) y Norte y Centroamérica (NA)
+    reg: cont === 'AM' ? (SOUTH_AMERICA.includes(iso) ? 'SA' : 'NA') : cont,
   }));
   const byId = new Map(countries.map(c => [c.id, c]));
   const keyIndex = new Map();
@@ -136,9 +143,9 @@
     markers.attr('r', MARKER_R / k).classed('hidden', c => !c.isPoint && c.size * k > 18);
   }
 
-  function regionTransform(key) {
-    const r = REGION_BY_KEY[key];
-    if (!r || !r.box) {
+  // Encuadre del mapa para una o varias regiones: une los recuadros proyectados de cada una
+  function regionTransform(regs) {
+    if (isWorld(regs)) {
       // Pantalla vertical (celular): el mundo entero queda muy chico, así que arrancamos más cerca
       const b = path.bounds({ type: 'Sphere' });
       const mapH = b[1][1] - b[0][1];
@@ -147,22 +154,27 @@
       const [cx, cy] = projection([20, 12]);
       return d3.zoomIdentity.translate(W / 2 - k * cx, H / 2 - k * cy).scale(k);
     }
-    const [x0, y0, x1, y1] = r.box;
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (let i = 0; i <= 24; i++) {
-      const lon = x0 + (x1 - x0) * i / 24, lat = y0 + (y1 - y0) * i / 24;
-      [[lon, y0], [lon, y1], [x0, lat], [x1, lat]].forEach(pt => {
-        const p = projection(pt);
-        if (!p) return;
-        minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
-        minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
-      });
-    }
-    const k = 0.94 * Math.min(W / (maxX - minX), H / (maxY - minY));
-    return d3.zoomIdentity.translate(W / 2 - k * (minX + maxX) / 2, H / 2 - k * (minY + maxY) / 2).scale(k);
+    regs.forEach(key => {
+      const [x0, y0, x1, y1] = REGION_BY_KEY[key].box;
+      for (let i = 0; i <= 24; i++) {
+        const lon = x0 + (x1 - x0) * i / 24, lat = y0 + (y1 - y0) * i / 24;
+        [[lon, y0], [lon, y1], [x0, lat], [x1, lat]].forEach(pt => {
+          const p = projection(pt);
+          if (!p) return;
+          minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
+          minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
+        });
+      }
+    });
+    // Dejamos lugar arriba para la tarjeta del país / la caja para escribir
+    const top = Math.min(80, H * 0.12);
+    const h = H - top;
+    const k = 0.94 * Math.min(W / (maxX - minX), h / (maxY - minY));
+    return d3.zoomIdentity.translate(W / 2 - k * (minX + maxX) / 2, top + h / 2 - k * (minY + maxY) / 2).scale(k);
   }
   function goRegion(animate) {
-    const t = regionTransform(currentRegionKey());
+    const t = regionTransform(currentRegions());
     if (animate) svg.transition().duration(700).call(zoom.transform, t);
     else svg.call(zoom.transform, t);
   }
@@ -210,8 +222,18 @@
 
   // ───────── Estado ─────────
   const saved = store.get('pdm-settings') || {};
+  function loadRegions() {
+    if (Array.isArray(saved.regions)) {
+      const r = saved.regions.filter(k => REGION_BY_KEY[k]);
+      if (r.length) return r;
+    }
+    // compatibilidad con la versión anterior (una sola región)
+    if (saved.region === 'AM') return ['NA', 'SA'];
+    if (REGION_BY_KEY[saved.region]) return [saved.region];
+    return REGION_KEYS.slice();
+  }
   const settings = {
-    region: REGION_BY_KEY[saved.region] ? saved.region : 'WORLD',
+    regions: loadRegions(),
     mode: COUNTRY_MODES.includes(saved.mode) ? saved.mode : 'locate',
     flagMode: FLAG_MODES.includes(saved.flagMode) ? saved.flagMode : 'flagOne',
     timerOn: !!saved.timerOn,
@@ -221,23 +243,36 @@
   let game = null;
   let selected = null;
   let ticker = null;
-  function currentRegionKey() { return game ? game.region : settings.region; }
+  function currentRegions() { return game ? game.regions : settings.regions; }
 
   // ───────── Opciones (setup) ─────────
   const setupEl = $('setup');
   const regionChips = $('region-chips');
-  REGIONS.forEach(r => {
-    const n = r.key === 'WORLD' ? countries.length : countries.filter(c => c.cont === r.key).length;
+  const regionCount = key => countries.filter(c => c.reg === key).length;
+  [{ key: 'WORLD', name: 'Todo el mundo' }].concat(REGIONS).forEach(r => {
+    const n = r.key === 'WORLD' ? countries.length : regionCount(r.key);
     const b = document.createElement('button');
     b.type = 'button'; b.dataset.region = r.key;
     b.innerHTML = `${r.name} <small>${n}</small>`;
     regionChips.appendChild(b);
   });
+  // Tocar un continente lo marca o desmarca (se pueden elegir varios).
+  // "Todo el mundo" marca todos; si desmarcás todos, vuelve a "Todo el mundo".
   regionChips.addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    settings.region = b.dataset.region; renderSetup();
-    if ((!game || game.over) && !$('stage').hidden) { inRegion = regionSet(settings.region); paintAll(); goRegion(true); }
+    const key = b.dataset.region;
+    if (key === 'WORLD') settings.regions = REGION_KEYS.slice();
+    else if (isWorld(settings.regions)) settings.regions = [key];
+    else if (settings.regions.includes(key)) settings.regions = settings.regions.filter(k => k !== key);
+    else settings.regions = REGION_KEYS.filter(k => k === key || settings.regions.includes(k));
+    if (!settings.regions.length) settings.regions = REGION_KEYS.slice();
+    renderSetup();
+    if ((!game || game.over) && !$('stage').hidden) { inRegion = regionSet(settings.regions); paintAll(); goRegion(true); }
   });
+  document.querySelectorAll('#setup-tabs button').forEach(b => b.addEventListener('click', () => {
+    setupKind = b.dataset.kind;
+    renderSetup();
+  }));
   $('mode-cards').addEventListener('click', e => {
     const b = e.target.closest('.mode'); if (!b) return;
     settings.mode = b.dataset.mode; renderSetup();
@@ -263,8 +298,17 @@
     document.querySelectorAll('#time-presets button').forEach(b => b.classList.toggle('on', +b.dataset.secs === settings.secs));
   }
   function renderSetup() {
-    regionChips.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.region === settings.region));
+    const world = isWorld(settings.regions);
+    regionChips.querySelectorAll('button').forEach(b => b.classList.toggle('on',
+      b.dataset.region === 'WORLD' ? world : !world && settings.regions.includes(b.dataset.region)));
+    const n = countries.filter(c => settings.regions.includes(c.reg)).length;
+    $('region-total').textContent = world ? '' : `${regionLabel(settings.regions)}: ${n} países`;
     const flags = setupKind === 'flags';
+    document.querySelectorAll('#setup-tabs button').forEach(b => {
+      const on = b.dataset.kind === setupKind;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    });
     $('setup-title').textContent = flags ? 'Estudiá las banderas del mundo' : 'Estudiá los países del mundo';
     $('mode-cards').hidden = flags;
     $('flag-mode-cards').hidden = !flags;
@@ -332,8 +376,8 @@
   });
 
   // ───────── Juego ─────────
-  function regionSet(key) {
-    return new Set(key === 'WORLD' ? countries : countries.filter(c => c.cont === key));
+  function regionSet(regs) {
+    return new Set(countries.filter(c => regs.includes(c.reg)));
   }
   function shuffle(a) {
     for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
@@ -346,10 +390,10 @@
     clearTimeout(pendingAccept);
     const kind = setupKind;
     const mode = kind === 'flags' ? settings.flagMode : settings.mode;
-    inRegion = regionSet(settings.region);
+    inRegion = regionSet(settings.regions);
     const list = [...inRegion];
     game = {
-      kind, mode, region: settings.region, list, total: list.length,
+      kind, mode, regions: settings.regions.slice(), list, total: list.length,
       correct: 0, first: 0, misses: [], found: new Set(),
       queue: shuffle(list.slice()), current: null, attempts: 0, locked: false, over: false,
       timerOn: mode !== 'explore' && settings.timerOn, limitMs: settings.secs * 1000,
@@ -364,7 +408,7 @@
     $('results').hidden = true;
     closeDrawer();
     $('hud').hidden = false;
-    $('hud-label').textContent = `${REGION_BY_KEY[game.region].name} · ${MODE_NAMES[mode]}`;
+    $('hud-label').textContent = `${regionLabel(game.regions)} · ${MODE_NAMES[mode]}`;
     $('stat-score').hidden = mode === 'explore';
     $('stat-time').hidden = mode === 'explore';
     $('btn-restart').hidden = mode === 'explore';
@@ -540,7 +584,7 @@
     }
     const { c, k } = m;
     if (!inRegion.has(c)) {
-      ui.hint(`${c.name} no está en ${REGION_BY_KEY[game.region].name}`);
+      ui.hint(`${c.name} no está en ${regionLabel(game.regions)}`);
       if (enter) { ui.input.value = ''; ui.shake(); }
       return;
     }
@@ -584,7 +628,7 @@
     if (!game) return;
     const hasProgress = !game.over && (game.correct > 0 || game.misses.length > 0);
     if (hasProgress && !window.confirm('¿Reiniciar el juego? Vas a perder lo que llevás.')) return;
-    settings.region = game.region;
+    settings.regions = game.regions.slice();
     if (game.kind === 'flags') settings.flagMode = game.mode; else settings.mode = game.mode;
     setupKind = game.kind;
     settings.timerOn = game.timerOn;
@@ -824,7 +868,7 @@
        <div class="reveal-text">
          <strong>${title}</strong>
          <span>Capital: ${c.capital}</span>
-         <span class="muted">${CONT_NAMES[c.cont]}</span>
+         <span class="muted">${REG_NAMES[c.reg]}</span>
          ${note ? `<span class="reveal-note">${note}</span>` : ''}
        </div>`;
     if (closable) el.querySelector('.close').addEventListener('click', hideFloatingReveal);
@@ -876,7 +920,7 @@
     $('info-flag').alt = `Bandera de ${c.name}`;
     $('info-name').textContent = c.name;
     $('info-capital').textContent = `Capital: ${c.capital}`;
-    $('info-cont').textContent = CONT_NAMES[c.cont];
+    $('info-cont').textContent = REG_NAMES[c.reg];
     $('infocard').hidden = false;
   }
   function clearSelection() {
@@ -959,7 +1003,7 @@
   });
 
   function renderList() {
-    const key = currentRegionKey();
+    const regs = REGION_KEYS.filter(k => currentRegions().includes(k));
     const list = [...inRegion].sort(byName);
     const clickable = !game || game.over || game.mode === 'explore';
     const playingMemory = game && !game.over && game.mode === 'memory';
@@ -971,17 +1015,18 @@
     nb.querySelector('span').textContent = showNames ? 'Ocultar' : 'Ver nombres';
     nb.title = showNames ? 'Tapar los nombres de la lista' : 'Mostrar los nombres de la lista';
     nb.classList.toggle('on', showNames);
-    $('drawer-title').textContent = key === 'WORLD' ? 'Todos los países' : `Países de ${REGION_BY_KEY[key].name}`;
+    $('drawer-title').textContent = isWorld(regs) ? 'Todos los países'
+      : regs.length === 1 ? `Países de ${REG_NAMES[regs[0]]}` : 'Países elegidos';
     $('drawer-count').textContent = game && game.mode !== 'explore' ? `${game.correct}/${game.total}` : `${list.length}`;
     const frag = document.createDocumentFragment();
-    const conts = key === 'WORLD' ? Object.keys(CONT_NAMES) : [key];
-    conts.forEach(ck => {
-      const items = list.filter(c => c.cont === ck && (!q || c.keys.some(k => k.includes(q))));
+    // Con más de una región, la lista va agrupada por región
+    regs.forEach(rk => {
+      const items = list.filter(c => c.reg === rk && (!q || c.keys.some(k => k.includes(q))));
       if (!items.length) return;
-      if (key === 'WORLD') {
+      if (regs.length > 1) {
         const g = document.createElement('li');
         g.className = 'group';
-        g.textContent = `${CONT_NAMES[ck]} (${items.length})`;
+        g.textContent = `${REG_NAMES[rk]} (${items.length})`;
         frag.appendChild(g);
       }
       items.forEach(c => {
@@ -1044,7 +1089,7 @@
 
   // ───────── Inicio ─────────
   layout();
-  inRegion = regionSet(settings.region);
+  inRegion = regionSet(settings.regions);
   paintAll();
   goRegion(false);
   renderSetup();

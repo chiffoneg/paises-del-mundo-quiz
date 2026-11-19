@@ -179,11 +179,22 @@
   <!-- Opciones -->
   <div class="modal-wrap" id="setup">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="setup-title">
+      <div class="tabs" id="setup-tabs" role="tablist" aria-label="Tipo de juego">
+        <button type="button" role="tab" data-kind="countries">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-3 3-3 15 0 18M12 3c3 3 3 15 0 18"/></svg>
+          Países
+        </button>
+        <button type="button" role="tab" data-kind="flags">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>
+          Banderas
+        </button>
+      </div>
       <h1 id="setup-title">Estudiá los países del mundo</h1>
-      <p class="lead" id="setup-lead">Elegí una región, un modo y, si querés, un tiempo límite para hacerlo tipo prueba.</p>
+      <p class="lead" id="setup-lead">Elegí uno o varios continentes, un modo y, si querés, un tiempo límite para hacerlo tipo prueba.</p>
 
-      <h2>Región</h2>
+      <h2>Continentes <span class="h2-note">(podés elegir varios)</span></h2>
       <div class="chips" id="region-chips"></div>
+      <p class="region-total" id="region-total" aria-live="polite"></p>
 
       <h2>Modo</h2>
       <div class="modes" id="mode-cards">

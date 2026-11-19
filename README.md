@@ -6,7 +6,7 @@ Página para estudiar los **195 países del mundo** (193 de la ONU + Vaticano y 
 
 ## Qué tiene
 
-- **Regiones:** todo el mundo o por continente (África, América, Asia, Europa, Oceanía).
+- **Regiones:** todo el mundo o uno o varios continentes a la vez (África, Norte y Centroamérica, Sudamérica, Asia, Europa, Oceanía).
 - **Modo Ubicar:** te muestra el nombre y la bandera de un país y lo tenés que marcar en el mapa. 3 intentos por país; si fallás, te lo marca en rojo.
 - **Modo De memoria:** escribís todos los países que te acuerdes y se van pintando en el mapa. Botón "Ver lista" con los que ya pusiste en verde.
 - **Modo Explorar:** tocás cualquier país y te muestra nombre, bandera y capital.
