@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://chiffoneg.github.io/paises-del-mundo-quiz/sitemap.xml
