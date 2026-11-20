@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=07536686">
+  <link rel="stylesheet" href="css/styles.css?v=230413cb">
   <script>
     // Aplica el tema guardado antes de pintar para evitar parpadeo
     try { var t = localStorage.getItem('pdm-theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
@@ -64,6 +64,10 @@
       <button class="btn icon" id="btn-pause" type="button" title="Pausar el tiempo" aria-label="Pausar el tiempo">
         <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
         <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>
+      </button>
+      <button class="btn" id="btn-hint" type="button" title="Pista: muestra en un mapa dónde queda el país" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1 2V16h5.2v-.2c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/></svg>
+        <span>Pista</span>
       </button>
     </div>
     <div class="hud-actions">
@@ -152,10 +156,7 @@
 
     <!-- Todas juntas -->
     <div class="fg" id="flag-grid" hidden>
-      <form class="fg-bar" id="fg-form" autocomplete="off">
-        <input id="fg-input" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Escribí un país y apretá Enter…" aria-label="Nombre del país">
-        <span class="type-hint" id="fg-hint" aria-live="polite"></span>
-      </form>
+      <p class="fg-tip" id="fg-tip">Escribí el país <b>debajo de cada bandera</b>. Con Enter o Tab pasás a la siguiente.</p>
       <ul class="fg-grid" id="fg-grid"></ul>
     </div>
   </section>
@@ -279,6 +280,6 @@
   <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
   <script src="data/world.js?v=8aea4e74"></script>
   <script src="data/countries.js?v=2e6d2a00"></script>
-  <script src="js/app.js?v=07e3120c"></script>
+  <script src="js/app.js?v=94ed336d"></script>
 </body>
 </html>

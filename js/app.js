@@ -328,7 +328,8 @@
     if (game && !game.over) pauseClock();
     clearTimeout(pendingAccept);
     // que lo que escribas con el menú abierto no cuente como respuesta
-    if (document.activeElement && GAME_INPUTS.includes(document.activeElement.id)) document.activeElement.blur();
+    if (document.activeElement && gameInputs().includes(document.activeElement)) document.activeElement.blur();
+    setHintPick(false);
     setupKind = kind || (game ? game.kind : setupKind);
     $('setup-cancel').hidden = !game;
     $('results').hidden = true;
@@ -344,18 +345,21 @@
   }
   function focusInput() {
     if (!game || game.over) return;
-    const id = { memory: 'type-input', flagOne: 'fo-input', flagGrid: 'fg-input' }[game.mode];
+    if (game.mode === 'flagGrid') { focusCell(game.lastCell, true); return; }
+    const id = { memory: 'type-input', flagOne: 'fo-input' }[game.mode];
     if (id) $(id).focus();
   }
-  const GAME_INPUTS = ['type-input', 'fo-input', 'fg-input'];
+  function gameInputs() {
+    return [$('type-input'), $('fo-input'), ...document.querySelectorAll('#fg-grid .fg-in')];
+  }
 
   // Pausa manual (botón ⏸ al lado del tiempo)
   function setUserPause(on) {
     if (!game || game.over || game.mode === 'explore') return;
     game.userPaused = on;
-    if (on) { clearTimeout(pendingAccept); pauseClock(); } else resumeClock();
+    if (on) { clearTimeout(pendingAccept); pauseClock(); setHintPick(false); } else resumeClock();
     $('paused').hidden = !on;
-    GAME_INPUTS.forEach(id => { $(id).disabled = on; });
+    gameInputs().forEach(el => { el.disabled = on; });
     updatePauseBtn();
     tick();
     if (!on) focusInput();
@@ -402,8 +406,9 @@
       queue: shuffle(list.slice()), current: null, attempts: 0, locked: false, over: false,
       timerOn: mode !== 'explore' && settings.timerOn, limitMs: settings.secs * 1000,
       elapsedMs: 0, resumedAt: performance.now(), paused: false,
+      hints: 0, hintPick: false, lastCell: null,
     };
-    countries.forEach(c => { c.status = null; });
+    countries.forEach(c => { c.status = null; c.hinted = false; });
     clearSelection();
     fxG.selectAll('*').remove();
     paintAll();
@@ -417,6 +422,8 @@
     $('stat-time').hidden = mode === 'explore';
     $('btn-restart').hidden = mode === 'explore';
     $('btn-pause').hidden = mode === 'explore';
+    $('btn-hint').hidden = kind !== 'flags';
+    setHintPick(false);
     $('paused').hidden = true;
     updatePauseBtn();
     showNames = false;
@@ -428,7 +435,7 @@
     $('btn-end').textContent = mode === 'memory' || mode === 'flagGrid' ? 'Me rindo' : 'Terminar';
     $('prompt').hidden = mode !== 'locate';
     $('typebox').hidden = mode !== 'memory';
-    GAME_INPUTS.forEach(id => { $(id).disabled = false; $(id).value = ''; });
+    ['type-input', 'fo-input'].forEach(id => { $(id).disabled = false; $(id).value = ''; });
     setHint('');
     updateScore(false);
     $('btn-countries').classList.toggle('on', kind === 'countries');
@@ -439,7 +446,7 @@
     $('flagstage').hidden = kind !== 'flags';
     $('flag-one').hidden = mode !== 'flagOne';
     $('flag-grid').hidden = mode !== 'flagGrid';
-    $('fg-form').hidden = false;
+    $('fg-tip').hidden = false;
     hideFloatingReveal();
     if (kind === 'countries') requestAnimationFrame(() => { layout(); goRegion(true); });
 
@@ -450,9 +457,8 @@
     if (mode === 'flagGrid') {
       game.gridOrder = shuffle(list.slice());
       buildGrid(game.gridOrder);
-      setGridHint('');
       $('flagstage').scrollTop = 0;
-      setTimeout(() => $('fg-input').focus(), 50);
+      setTimeout(() => focusCell(game.gridOrder[0], true), 50);
     }
     if (mode !== 'explore') { tick(); ticker = setInterval(tick, 200); }
   }
@@ -687,15 +693,17 @@
       // Al terminar se ven todas las banderas con su nombre y el resultado
       $('flag-one').hidden = true;
       $('flag-grid').hidden = false;
-      $('fg-form').hidden = true;
+      $('fg-tip').hidden = true;
       buildGrid(game.mode === 'flagGrid' ? game.gridOrder : game.list.slice().sort(byName));
       $('flagstage').scrollTop = 0;
     }
 
     $('prompt').hidden = true;
     $('typebox').hidden = true;
-    GAME_INPUTS.forEach(id => { $(id).disabled = true; });
+    gameInputs().forEach(el => { el.disabled = true; });
     $('btn-skip').hidden = true;
+    $('btn-hint').hidden = true;
+    setHintPick(false);
     $('btn-end').hidden = true;
     $('btn-pause').hidden = true;
     $('paused').hidden = true;
@@ -716,6 +724,7 @@
     const pct = Math.round(100 * g.correct / g.total);
     const parts = [`${pct}%`, `tiempo: ${fmt(Math.round(g.elapsedMs / 1000))}`];
     if (g.mode === 'locate' || g.mode === 'flagOne') parts.push(`${g.first} a la primera`);
+    if (g.kind === 'flags') parts.push(g.hints === 1 ? '1 pista' : `${g.hints} pistas`);
     $('res-sub').textContent = parts.join(' · ');
     $('res-map').textContent = g.kind === 'flags' ? 'Ver banderas' : 'Ver mapa';
     const ul = $('res-missed');
@@ -740,7 +749,6 @@
   // ───────── Banderas ─────────
   let advanceT = null;
   const foInput = $('fo-input');
-  const fgInput = $('fg-input');
 
   function foHint(html, cls) {
     const h = $('fo-hint');
@@ -819,13 +827,14 @@
   });
   $('fo-skip').addEventListener('click', skipCurrent);
 
-  // Grilla
+  // Grilla: cada bandera tiene su propio casillero
+  function gridPlaying() { return !!(game && !game.over && game.mode === 'flagGrid'); }
   function buildGrid(order) {
     const frag = document.createDocumentFragment();
     order.forEach(c => {
       const li = document.createElement('li');
       li.dataset.id = c.id;
-      li.innerHTML = `<div class="fg-flag"><img src="${flagUrl(c.iso, 160)}" srcset="${flagUrl(c.iso, 320)} 2x" alt="Bandera" loading="lazy"></div><span class="fg-name"></span>`;
+      li.innerHTML = `<div class="fg-flag"><img src="${flagUrl(c.iso, 160)}" srcset="${flagUrl(c.iso, 320)} 2x" alt="Bandera" loading="lazy"></div><div class="fg-slot"></div>`;
       c.gridEl = li;
       paintGridItem(c);
       frag.appendChild(li);
@@ -836,33 +845,110 @@
     const li = c.gridEl;
     if (!li) return;
     const st = c.status === 'found' ? 'ok1' : c.status;
-    li.className = 'fg-item' + (st ? ' ' + st : '');
-    li.querySelector('.fg-name').textContent = st ? c.name : '?';
+    li.className = 'fg-item' + (st ? ' ' + st : '') + (c.hinted && !st ? ' hinted' : '');
+    const slot = li.querySelector('.fg-slot');
+    if (!st && gridPlaying()) {
+      if (!slot.querySelector('.fg-in')) {
+        slot.innerHTML = '<input class="fg-in" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="next" placeholder="¿Qué país?" aria-label="País de esta bandera">';
+      }
+      return;
+    }
+    slot.innerHTML = `<span class="fg-name">${st ? c.name : '?'}</span>`;
   }
-  function setGridHint(html, cls) {
-    $('fg-hint').innerHTML = html;
-    $('fg-form').classList.toggle('good', cls === 'good');
+  function cellInput(c) { return c && c.gridEl ? c.gridEl.querySelector('.fg-in') : null; }
+  // Enfoca el casillero de c (o el siguiente que falte, si c ya está)
+  function focusCell(c, orNext) {
+    if (!gridPlaying()) return;
+    let target = c && !c.status ? c : null;
+    if (!target && orNext) target = nextOpen(c);
+    const el = cellInput(target);
+    if (el) el.focus();
+  }
+  function nextOpen(c) {
+    const order = game.gridOrder;
+    const i = c ? order.indexOf(c) : -1;
+    for (let n = 1; n <= order.length; n++) {
+      const o = order[(i + n) % order.length];
+      if (!o.status) return o;
+    }
+    return null;
+  }
+  function gridTry(el, enter) {
+    if (!gridPlaying() || game.userPaused || !setupEl.hidden) return;
+    const c = byId.get(el.closest('.fg-item').dataset.id);
+    if (!c || c.status) return;
+    el.classList.remove('bad');
+    const raw = el.value;
+    if (!raw.trim()) { if (enter) focusCell(nextOpen(c)); return; }
+    const m = matchInput(raw);
+    if (m && m.c === c) { acceptGrid(c); return; }
+    if (!enter) return; // los errores solo se marcan al apretar Enter
+    shake(c.gridEl);
+    el.select();
+    if (!m) { toast(`No reconozco “${escapeHtml(raw.trim())}”`, 'bad'); return; }
+    el.classList.add('bad');
+    toast(`✗ No es ${m.c.name}`, 'bad');
   }
   function acceptGrid(c) {
     if (!markFound(c)) return;
     paintGridItem(c);
-    fgInput.value = '';
-    setGridHint(`✓ ${c.name} <span class="muted">· ${c.capital}</span>`, 'good');
-    c.gridEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
     c.gridEl.classList.add('pop');
     showFloatingReveal(c, 'ok', 2600);
-    if (game.correct === game.total) finish('done');
+    if (game.correct === game.total) { finish('done'); return; }
+    focusCell(nextOpen(c));
   }
-  const gridUI = { mode: 'flagGrid', input: fgInput, hint: setGridHint, shake: () => shake($('fg-form')), accept: acceptGrid };
-  fgInput.addEventListener('input', () => tryMatch(false, gridUI));
-  $('fg-form').addEventListener('submit', e => { e.preventDefault(); tryMatch(true, gridUI); });
+  $('fg-grid').addEventListener('input', e => {
+    if (e.target.classList.contains('fg-in')) gridTry(e.target, false);
+  });
+  $('fg-grid').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.classList.contains('fg-in')) { e.preventDefault(); gridTry(e.target, true); }
+  });
+  $('fg-grid').addEventListener('focusin', e => {
+    if (!e.target.classList.contains('fg-in') || !game) return;
+    game.lastCell = byId.get(e.target.closest('.fg-item').dataset.id);
+  });
   $('fg-grid').addEventListener('click', e => {
     const li = e.target.closest('.fg-item');
     if (!li) return;
     const c = byId.get(li.dataset.id);
-    if (game && !game.over && !c.status) { focusInput(); return; }
+    if (gridPlaying() && !c.status) {
+      if (game.hintPick) { setHintPick(false); giveHint(c); }
+      if (!e.target.classList.contains('fg-in')) focusCell(c);
+      return;
+    }
+    if (game && game.hintPick) setHintPick(false);
     const st = c.status === 'miss' ? 'miss' : c.status === 'ok2' ? 'ok2' : 'ok';
     showFloatingReveal(c, st, 0);
+  });
+
+  // Pista: mapita con la ubicación, sin decir el nombre
+  function setHintPick(on) {
+    if (game) game.hintPick = on;
+    $('btn-hint').classList.toggle('on', on);
+    $('flagstage').classList.toggle('picking', on);
+  }
+  function giveHint(c) {
+    if (!c.hinted) { c.hinted = true; game.hints++; }
+    $('toast').className = 'toast'; // saca el aviso de 'tocá una bandera'
+    if (game.mode === 'flagGrid') {
+      paintGridItem(c);
+      showFloatingReveal(c, 'hint', 0);
+    } else {
+      fillReveal($('fo-reveal'), c, 'hint', '');
+    }
+  }
+  $('btn-hint').addEventListener('click', () => {
+    if (!game || game.over || game.kind !== 'flags' || game.userPaused) return;
+    if (game.mode === 'flagOne') {
+      if (game.locked || !game.current) return;
+      giveHint(game.current);
+      foInput.focus();
+      return;
+    }
+    if (game.hintPick) { setHintPick(false); focusInput(); return; }
+    setHintPick(true);
+    hideFloatingReveal();
+    toast('Tocá una bandera para ver dónde queda', '', 2200);
   });
 
   // Ficha con mapita (globo) del país
@@ -877,15 +963,16 @@
     $('fg-reveal').hidden = true;
   }
   function fillReveal(el, c, state, note, closable) {
-    const title = state === 'miss' ? `✗ Era ${c.name}` : `✓ ${c.name}`;
+    const hint = state === 'hint';
+    const title = hint ? 'Pista' : state === 'miss' ? `✗ Era ${c.name}` : `✓ ${c.name}`;
     el.className = 'reveal ' + state + (el.id === 'fg-reveal' ? ' floating' : '');
     el.innerHTML =
       (closable ? '<button class="close" type="button" aria-label="Cerrar">×</button>' : '') +
       `<div class="globe"><svg aria-hidden="true"></svg></div>
        <div class="reveal-text">
          <strong>${title}</strong>
-         <span>Capital: ${c.capital}</span>
-         <span class="muted">${REG_NAMES[c.reg]}</span>
+         ${hint ? `<span>Está en ${REG_NAMES[c.reg]}</span>` : `<span>Capital: ${c.capital}</span>
+         <span class="muted">${REG_NAMES[c.reg]}</span>`}
          ${note ? `<span class="reveal-note">${note}</span>` : ''}
        </div>`;
     if (closable) el.querySelector('.close').addEventListener('click', hideFloatingReveal);
@@ -1092,6 +1179,7 @@
       if (!setupEl.hidden) { if (game) closeSetup(); }
       else if (!drawer.hidden) closeDrawer();
       else if (selected) clearSelection();
+      else if (game && game.hintPick) { setHintPick(false); focusInput(); }
       else if (!$('fg-reveal').hidden) hideFloatingReveal();
     }
   });
